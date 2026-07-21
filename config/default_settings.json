@@ -1,0 +1,25 @@
+{
+  "_comment": "Default settings loaded by AudioEngine on first run if no user settings exist.",
+  "version": "0.1.0",
+  "audio": {
+    "buffer_size_ms": 20,
+    "enable_resampling": true,
+    "enable_drift_correction": true,
+    "preferred_sample_rate": 48000,
+    "preferred_channels": 2
+  },
+  "routing": {
+    "input_device_id": "",
+    "output_device_ids": []
+  },
+  "logging": {
+    "level": "Info",
+    "max_file_size_mb": 10,
+    "max_ring_buffer_entries": 1000
+  },
+  "ui": {
+    "start_minimized": false,
+    "theme": "dark",
+    "active_profile": "Default"
+  }
+}

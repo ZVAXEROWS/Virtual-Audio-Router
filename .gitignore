@@ -1,0 +1,109 @@
+# Virtual Audio Router — Windows audio routing engine
+# Routes one audio source to multiple physical output devices simultaneously.
+
+# =============================================================================
+# Build artifacts
+# =============================================================================
+
+# CMake build directories
+build/
+out/
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+*.cmake
+!CMakeLists.txt
+!CMakePresets.json
+
+# Compiled binaries
+*.exe
+*.dll
+*.pyd
+*.pdb
+*.ilk
+*.exp
+*.lib
+
+# Object files
+*.obj
+*.o
+
+# =============================================================================
+# Python
+# =============================================================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+*.whl
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# =============================================================================
+# Log files
+# =============================================================================
+
+*.log
+logs/
+
+# =============================================================================
+# IDE / Editor
+# =============================================================================
+
+# Visual Studio
+.vs/
+*.user
+*.aps
+*.ncb
+*.suo
+*.sln.docstates
+ipch/
+*.VC.db
+*.VC.VC.opendb
+*.opendb
+x64/
+x86/
+
+# VS Code
+.vscode/
+
+# JetBrains
+.idea/
+cmake-build-debug/
+cmake-build-release/
+
+# =============================================================================
+# OS
+# =============================================================================
+
+# Windows
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# Temp
+*.tmp
+*.bak
+*.swp
+*~
+
+# =============================================================================
+# Project-specific
+# =============================================================================
+
+# User config (do not commit personal device lists)
+settings.json
+
+# Installer output
+installer/*.exe
+installer/*.msi
+
+# Driver signing artifacts
+driver/*.cer
+driver/*.pfx
