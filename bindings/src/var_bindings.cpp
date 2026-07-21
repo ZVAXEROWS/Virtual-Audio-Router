@@ -142,6 +142,13 @@ PYBIND11_MODULE(var_engine, m) {
             [](AudioEngine& self) { self.Shutdown(); },
             "Cleanly shut down all subsystems.")
 
+        .def("set_device_change_callback",
+            [](AudioEngine& self, std::function<void()> callback) {
+                self.SetDeviceChangeCallback(std::move(callback));
+            },
+            py::arg("callback"),
+            "Register a callback to be invoked when audio devices are added, removed, or changed.")
+
         // Device management
         .def("get_devices",
             [](AudioEngine& self) -> py::list {

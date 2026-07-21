@@ -184,6 +184,55 @@ static DeviceInfo DeviceInfoFromIMMDevice(IMMDevice* pDevice,
     return info;
 }
 
+class NotificationClient : public IMMNotificationClient {
+public:
+    NotificationClient(std::function<void()> cb) : m_cb(std::move(cb)) {}
+    virtual ~NotificationClient() = default;
+
+    // IUnknown
+    ULONG STDMETHODCALLTYPE AddRef() override { return InterlockedIncrement(&m_ref); }
+    ULONG STDMETHODCALLTYPE Release() override {
+        ULONG ulRef = InterlockedDecrement(&m_ref);
+        if (0 == ulRef) delete this;
+        return ulRef;
+    }
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
+        if (IID_IUnknown == riid || __uuidof(IMMNotificationClient) == riid) {
+            *ppv = static_cast<IMMNotificationClient*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+
+    // IMMNotificationClient
+    HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR, DWORD) override {
+        if (m_cb) m_cb();
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnDeviceAdded(LPCWSTR) override {
+        if (m_cb) m_cb();
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnDeviceRemoved(LPCWSTR) override {
+        if (m_cb) m_cb();
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnDefaultDeviceChanged(EDataFlow, ERole, LPCWSTR) override {
+        if (m_cb) m_cb();
+        return S_OK;
+    }
+    HRESULT STDMETHODCALLTYPE OnPropertyValueChanged(LPCWSTR, const PROPERTYKEY) override {
+        // Ignore property changes to avoid spam
+        return S_OK;
+    }
+
+private:
+    LONG m_ref { 1 };
+    std::function<void()> m_cb;
+};
+
 // ---------------------------------------------------------------------------
 // Impl — owns the COM enumerator
 // ---------------------------------------------------------------------------
@@ -191,6 +240,8 @@ static DeviceInfo DeviceInfoFromIMMDevice(IMMDevice* pDevice,
 struct DeviceManager::Impl {
     ComPtr<IMMDeviceEnumerator> pEnumerator;
     bool comInitialized { false };
+    std::function<void()> callback;
+    NotificationClient* pClient { nullptr };
 };
 
 // ---------------------------------------------------------------------------
@@ -250,6 +301,12 @@ void DeviceManager::Shutdown() {
     if (!m_initialized) return;
 
     m_logger.Info("DeviceManager: Shutting down...");
+    if (m_impl->pClient && m_impl->pEnumerator) {
+        m_impl->pEnumerator->UnregisterEndpointNotificationCallback(m_impl->pClient);
+        m_impl->pClient->Release();
+        m_impl->pClient = nullptr;
+    }
+
     m_impl->pEnumerator.Reset();
 
     if (m_impl->comInitialized) {
@@ -259,6 +316,10 @@ void DeviceManager::Shutdown() {
 
     m_initialized = false;
     m_logger.Info("DeviceManager: Shutdown complete.");
+}
+
+void DeviceManager::SetDeviceChangeCallback(std::function<void()> callback) {
+    m_impl->callback = std::move(callback);
 }
 
 // ---------------------------------------------------------------------------
@@ -412,10 +473,32 @@ DeviceManager::GetDefaultDevice(DeviceType type) {
 // ---------------------------------------------------------------------------
 
 VoidResult DeviceManager::StartMonitoring() {
-    m_logger.Info("DeviceManager: Monitoring stub (Phase 3).");
+    if (!m_initialized || !m_impl->pEnumerator) {
+        return VoidResult::err(VarError{ ErrorCode::EngineNotInitialized });
+    }
+    if (m_impl->pClient) return VoidResult::ok();
+
+    m_impl->pClient = new NotificationClient(m_impl->callback);
+    HRESULT hr = m_impl->pEnumerator->RegisterEndpointNotificationCallback(m_impl->pClient);
+    if (FAILED(hr)) {
+        m_impl->pClient->Release();
+        m_impl->pClient = nullptr;
+        return VoidResult::err(VarError::fromHresult(ErrorCode::WasapiError,
+                                                    static_cast<uint32_t>(hr),
+                                                    "RegisterEndpointNotificationCallback"));
+    }
+
+    m_logger.Info("DeviceManager: Monitoring started.");
     return VoidResult::ok();
 }
 
-void DeviceManager::StopMonitoring() {}
+void DeviceManager::StopMonitoring() {
+    if (m_impl->pClient && m_impl->pEnumerator) {
+        m_impl->pEnumerator->UnregisterEndpointNotificationCallback(m_impl->pClient);
+        m_impl->pClient->Release();
+        m_impl->pClient = nullptr;
+        m_logger.Info("DeviceManager: Monitoring stopped.");
+    }
+}
 
 } // namespace var

@@ -37,6 +37,7 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <functional>
 #include "var/Types.h"
 #include "var/Result.h"
 
@@ -89,6 +90,9 @@ public:
     void StopMonitoring();
 
     bool IsInitialized() const { return m_initialized; }
+
+    /// Set callback invoked when devices change
+    void SetDeviceChangeCallback(std::function<void()> callback);
 
 private:
     // Forward-declared; implemented in DeviceManager.cpp using Windows headers

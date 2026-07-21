@@ -72,6 +72,9 @@ public:
     /// Cleanly shut down all subsystems and release resources.
     void Shutdown();
 
+    /// Register a callback for device hot-plug events
+    void SetDeviceChangeCallback(std::function<void()> callback);
+
     // =========================================================================
     // Device management (called from Python)
     // =========================================================================

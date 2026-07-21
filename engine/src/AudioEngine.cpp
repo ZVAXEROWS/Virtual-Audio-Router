@@ -101,6 +101,7 @@ VoidResult AudioEngine::Initialize(const std::string& logDirectory) {
         SetStatus(EngineStatus::Error);
         return devResult;
     }
+    m_impl->m_deviceManager->StartMonitoring();
 
     // --- 5. BufferManager ---------------------------------------------------
     m_impl->m_bufferManager = std::make_unique<BufferManager>(log);
@@ -144,7 +145,10 @@ void AudioEngine::Shutdown() {
     if (m_impl->m_syncManager)    m_impl->m_syncManager->Shutdown();
     if (m_impl->m_latencyManager) m_impl->m_latencyManager->Shutdown();
     if (m_impl->m_bufferManager)  m_impl->m_bufferManager->Shutdown();
-    if (m_impl->m_deviceManager)  m_impl->m_deviceManager->Shutdown();
+    if (m_impl->m_deviceManager) {
+        m_impl->m_deviceManager->StopMonitoring();
+        m_impl->m_deviceManager->Shutdown();
+    }
     if (m_impl->m_threadPool)     m_impl->m_threadPool->Shutdown();
     if (m_impl->m_dispatcher)     m_impl->m_dispatcher->Publish(EvEngineShutdown{});
     if (m_impl->m_dispatcher)     m_impl->m_dispatcher->Clear();
@@ -155,6 +159,12 @@ void AudioEngine::Shutdown() {
     }
 
     SetStatus(EngineStatus::Uninitialized);
+}
+
+void AudioEngine::SetDeviceChangeCallback(std::function<void()> callback) {
+    if (m_impl && m_impl->m_deviceManager) {
+        m_impl->m_deviceManager->SetDeviceChangeCallback(std::move(callback));
+    }
 }
 
 // ---------------------------------------------------------------------------

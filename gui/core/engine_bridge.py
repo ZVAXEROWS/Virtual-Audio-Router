@@ -4,31 +4,25 @@ engine_bridge.py — Virtual Audio Router
 Thin wrapper around the var_engine C++ pybind11 module.
 
 WHY THIS EXISTS:
-  - Catches ImportError if the C++ module hasn't been built yet and provides
-    a full mock implementation so UI developers can iterate without a C++ build.
   - Provides a clean, typed Python API surface on top of the raw pybind11 module.
   - Centralises all cross-bridge calls so they can be audited easily.
 
 RULES:
   - This module must NEVER process audio data.
   - All calls are safe to make from the UI thread.
-  - Methods that return device lists must return plain Python dicts.
 """
 
 from __future__ import annotations
 import os
 import sys
 import logging
-from typing import Any
+from typing import Any, Callable
 
 logger = logging.getLogger("var.bridge")
 
 # ---------------------------------------------------------------------------
-# Attempt to import the C++ extension
+# Import the C++ extension
 # ---------------------------------------------------------------------------
-
-_ENGINE_AVAILABLE = False
-_var_engine = None
 
 try:
     # The .pyd is output to the gui/ directory by CMake
@@ -36,131 +30,12 @@ try:
     if _gui_dir not in sys.path:
         sys.path.insert(0, _gui_dir)
 
-    import var_engine as _var_engine  # type: ignore
-    _ENGINE_AVAILABLE = True
+    import var_engine  # type: ignore
     logger.info("var_engine C++ module loaded successfully.")
 
 except ImportError as e:
-    logger.warning(
-        f"var_engine C++ module not found ({e}). "
-        "Running in mock/dev mode — no audio processing."
-    )
-
-
-# ---------------------------------------------------------------------------
-# Mock implementation (used when C++ engine is not built)
-# ---------------------------------------------------------------------------
-
-class _MockEngineStatus:
-    Uninitialized = 0
-    Initializing  = 1
-    Ready         = 2
-    Routing       = 3
-    Stopping      = 4
-    Error         = 5
-    ShuttingDown  = 6
-
-
-MOCK_DEVICES = [
-    {
-        "id": "mock-device-0",
-        "name": "Mock Speakers (Realtek HD Audio)",
-        "description": "High Definition Audio Device",
-        "state": 1,  # Active
-        "is_default": True,
-        "sample_rate": 48000,
-        "channels": 2,
-        "bits_per_sample": 32,
-        "latency_ms": 10.0,
-    },
-    {
-        "id": "mock-device-1",
-        "name": "Mock Bluetooth Headphones",
-        "description": "Bluetooth A2DP Audio",
-        "state": 1,
-        "is_default": False,
-        "sample_rate": 44100,
-        "channels": 2,
-        "bits_per_sample": 16,
-        "latency_ms": 80.0,
-    },
-    {
-        "id": "mock-device-2",
-        "name": "Mock USB DAC (Focusrite)",
-        "description": "USB Audio Device",
-        "state": 1,
-        "is_default": False,
-        "sample_rate": 48000,
-        "channels": 2,
-        "bits_per_sample": 32,
-        "latency_ms": 5.0,
-    },
-    {
-        "id": "mock-device-3",
-        "name": "Mock HDMI Output (NVIDIA)",
-        "description": "HDMI Audio",
-        "state": 1,
-        "is_default": False,
-        "sample_rate": 48000,
-        "channels": 6,
-        "bits_per_sample": 32,
-        "latency_ms": 15.0,
-    },
-]
-
-
-class _MockAudioEngine:
-    """Full mock implementation that mirrors the var_engine.AudioEngine API."""
-
-    def __init__(self):
-        self._status = _MockEngineStatus.Uninitialized
-        self._config = {}
-        self._logs: list[dict] = []
-        self._ts = 0
-
-    def _log(self, level: int, msg: str) -> None:
-        import time
-        self._ts += 50
-        self._logs.append({
-            "level": level,
-            "message": msg,
-            "source": "mock_engine.py",
-            "timestamp_ms": self._ts,
-        })
-
-    def initialize(self, log_directory: str = ".") -> None:
-        self._status = _MockEngineStatus.Ready
-        self._log(1, f"[MOCK] Engine initialized. Log dir: {log_directory}")
-
-    def shutdown(self) -> None:
-        self._status = _MockEngineStatus.Uninitialized
-        self._log(1, "[MOCK] Engine shutdown.")
-
-    def get_devices(self) -> list[dict]:
-        self._log(0, "[MOCK] get_devices() called — returning mock data.")
-        return list(MOCK_DEVICES)
-
-    def get_default_device(self) -> dict:
-        return MOCK_DEVICES[0]
-
-    def start_routing(self, config: dict) -> None:
-        self._config = config
-        self._status = _MockEngineStatus.Routing
-        ids = config.get("output_device_ids", [])
-        self._log(1, f"[MOCK] Routing started to {len(ids)} device(s).")
-
-    def stop_routing(self) -> None:
-        self._status = _MockEngineStatus.Ready
-        self._log(1, "[MOCK] Routing stopped.")
-
-    def get_status(self) -> int:
-        return self._status
-
-    def get_recent_logs(self, max_entries: int = 100) -> list[dict]:
-        return self._logs[-max_entries:]
-
-    def get_current_config(self) -> dict:
-        return dict(self._config)
+    logger.error(f"var_engine C++ module not found ({e}). Did you build the project?")
+    raise
 
 
 # ---------------------------------------------------------------------------
@@ -169,21 +44,16 @@ class _MockAudioEngine:
 
 class EngineBridge:
     """
-    Wraps either the real C++ AudioEngine or the mock engine.
+    Wraps the real C++ AudioEngine.
     All UI code imports and uses EngineBridge exclusively.
     """
 
     def __init__(self):
-        if _ENGINE_AVAILABLE and _var_engine is not None:
-            self._engine = _var_engine.AudioEngine()
-            self._mock = False
-        else:
-            self._engine = _MockAudioEngine()
-            self._mock = True
+        self._engine = var_engine.AudioEngine()
 
     @property
     def is_mock(self) -> bool:
-        return self._mock
+        return False
 
     # -------------------------------------------------------------------------
     # Lifecycle
@@ -203,6 +73,16 @@ class EngineBridge:
             self._engine.shutdown()
         except Exception as e:
             logger.error(f"Engine shutdown failed: {e}")
+
+    # -------------------------------------------------------------------------
+    # Callbacks
+    # -------------------------------------------------------------------------
+
+    def set_device_change_callback(self, callback: Callable[[], None]) -> None:
+        try:
+            self._engine.set_device_change_callback(callback)
+        except Exception as e:
+            logger.error(f"set_device_change_callback failed: {e}")
 
     # -------------------------------------------------------------------------
     # Devices

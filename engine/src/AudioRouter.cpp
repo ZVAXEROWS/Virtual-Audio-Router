@@ -42,6 +42,7 @@ struct AudioRouter::Impl {
     std::thread                captureThread;
     std::atomic<bool>          captureRunning { false };
     AudioFormat                captureFormat;
+    std::string                captureDeviceId;
     UINT32                     bufferFrameCount { 0 };
 };
 
@@ -134,6 +135,17 @@ VoidResult AudioRouter::RouteBuffer(uint32_t /*frameCount*/) {
 
     hr = pEnumerator->GetDefaultAudioEndpoint(eRender, eMultimedia, &m_impl->pCaptureDevice);
     if (FAILED(hr)) return VoidResult::err(VarError::fromHresult(ErrorCode::DeviceNotFound, hr, "GetDefaultAudioEndpoint"));
+
+    LPWSTR pwszId = nullptr;
+    if (SUCCEEDED(m_impl->pCaptureDevice->GetId(&pwszId)) && pwszId) {
+        int needed = WideCharToMultiByte(CP_UTF8, 0, pwszId, -1, nullptr, 0, nullptr, nullptr);
+        if (needed > 0) {
+            std::string result(needed - 1, '\0');
+            WideCharToMultiByte(CP_UTF8, 0, pwszId, -1, result.data(), needed, nullptr, nullptr);
+            m_impl->captureDeviceId = result;
+        }
+        CoTaskMemFree(pwszId);
+    }
 
     // 2. Activate Audio Client
     hr = m_impl->pCaptureDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL, nullptr, (void**)&m_impl->pAudioClient);
@@ -235,7 +247,9 @@ VoidResult AudioRouter::RouteBuffer(uint32_t /*frameCount*/) {
                 if (numFramesAvailable > 0 && pData != nullptr) {
                     std::lock_guard lock(m_impl->outputsMutex);
                     for (auto* device : m_impl->outputs) {
-                        device->Write(reinterpret_cast<const float*>(pData), numFramesAvailable);
+                        if (device->GetDeviceInfo().id != m_impl->captureDeviceId) {
+                            device->Write(reinterpret_cast<const float*>(pData), numFramesAvailable);
+                        }
                     }
                 }
 

@@ -32,7 +32,7 @@ set_target_properties(var_engine PROPERTIES
 )
 
 # Also copy to gui/ for multi-config generators (MSVC Debug/Release)
-foreach(CONFIG_TYPE Debug Release RelWithDebInfo MinSizeRel)
+foreach(CONFIG_TYPE DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
     set_target_properties(var_engine PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${CMAKE_SOURCE_DIR}/gui"
         RUNTIME_OUTPUT_DIRECTORY_${CONFIG_TYPE} "${CMAKE_SOURCE_DIR}/gui"

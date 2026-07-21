@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
     QFrame, QLabel, QPushButton, QTextEdit, QStatusBar,
     QMenuBar, QMenu, QToolBar, QSizePolicy
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QSize
+from PySide6.QtCore import Qt, QTimer, Signal, QSize, QObject
 from PySide6.QtGui import QAction, QColor, QTextCharFormat, QFont
 
 from core.engine_bridge import EngineBridge
@@ -60,6 +60,8 @@ _LOG_LEVEL_COLORS = {
 
 _LOG_LEVEL_NAMES = ["DBG", "INF", "WRN", "ERR", "FTL"]
 
+class _DeviceChangeSignaler(QObject):
+    changed = Signal()
 
 class MainWindow(QMainWindow):
     def __init__(self, bridge: EngineBridge, settings: AppSettings):
@@ -77,7 +79,16 @@ class MainWindow(QMainWindow):
         self._setup_tray()
         self._setup_timers()
         self._restore_state()
+        
+        # Setup device hot-plug monitoring
+        self._device_signaler = _DeviceChangeSignaler()
+        self._device_signaler.changed.connect(self._refresh_devices, Qt.ConnectionType.QueuedConnection)
+        self._bridge.set_device_change_callback(self._on_device_change_callback)
+        
         self._refresh_devices()
+
+    def _on_device_change_callback(self) -> None:
+        self._device_signaler.changed.emit()
 
     # =========================================================================
     # UI construction
