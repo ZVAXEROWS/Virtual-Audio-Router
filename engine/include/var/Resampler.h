@@ -28,6 +28,7 @@
 
 #include <cstdint>
 #include <vector>
+#include <memory>
 #include "var/Types.h"
 #include "var/Result.h"
 

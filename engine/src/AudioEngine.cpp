@@ -13,6 +13,7 @@
 #include "var/LatencyManager.h"
 #include "var/SynchronizationManager.h"
 #include "var/AudioRouter.h"
+#include "var/OutputDevice.h"
 #include "var/Constants.h"
 
 #include <filesystem>
@@ -38,6 +39,8 @@ struct AudioEngine::Impl {
 
     RouterConfig                           m_currentConfig;
     mutable std::mutex                     m_configMutex;
+
+    std::vector<std::unique_ptr<IDevice>>  m_activeOutputs;
 };
 
 // ---------------------------------------------------------------------------
@@ -189,9 +192,28 @@ VoidResult AudioEngine::StartRouting(const RouterConfig& config) {
         m_impl->m_currentConfig = config;
     }
 
-    m_impl->m_logger->Info("AudioEngine: StartRouting called (Phase 1 stub). " +
+    m_impl->m_logger->Info("AudioEngine: StartRouting called. " +
                            std::to_string(config.outputDeviceIds.size()) +
                            " output device(s) requested.");
+
+    // 1. Resolve output devices
+    std::vector<IDevice*> outputPointers;
+    m_impl->m_activeOutputs.clear();
+
+    for (const auto& id : config.outputDeviceIds) {
+        auto infoResult = m_impl->m_deviceManager->GetDeviceById(id);
+        if (infoResult) {
+            auto outDev = std::make_unique<OutputDevice>(infoResult.value(), *m_impl->m_logger);
+            outputPointers.push_back(outDev.get());
+            m_impl->m_activeOutputs.push_back(std::move(outDev));
+        }
+    }
+
+    m_impl->m_router->ConfigureOutputs(std::move(outputPointers));
+    auto routeRes = m_impl->m_router->RouteBuffer(0);
+    if (!routeRes) {
+        return VoidResult::err(VarError{ErrorCode::StartFailed, "Failed to start capture: " + routeRes.error().message});
+    }
 
     SetStatus(EngineStatus::Routing);
     m_impl->m_dispatcher->Publish(EvRoutingStarted{
@@ -209,7 +231,9 @@ VoidResult AudioEngine::StopRouting() {
     m_impl->m_logger->Info("AudioEngine: StopRouting called.");
     SetStatus(EngineStatus::Stopping);
 
-    // Phase 3+: signal audio threads to stop, join them
+    m_impl->m_router->Shutdown();
+    m_impl->m_activeOutputs.clear();
+
     SetStatus(EngineStatus::Ready);
     m_impl->m_dispatcher->Publish(EvRoutingStopped{});
 

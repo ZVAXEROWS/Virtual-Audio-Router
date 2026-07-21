@@ -54,11 +54,12 @@ if(WIN32)
     )
     # WASAPI / COM libraries (linked by engine target)
     set(VAR_WINDOWS_LIBS
-        ole32
-        oleaut32
-        uuid
-        winmm
-        ksuser
+        ole32        # COM fundamentals (CoInitializeEx, CoCreateInstance)
+        oleaut32     # Automation (PROPVARIANT)
+        uuid         # Interface GUIDs
+        winmm        # Legacy audio (mmsystem)
+        mmdevapi     # IMMDeviceEnumerator, IMMDevice, IAudioClient
+        ksuser       # KSDATAFORMAT GUIDs
     )
 endif()
 

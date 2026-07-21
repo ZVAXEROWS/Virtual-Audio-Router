@@ -33,7 +33,10 @@ target_include_directories(var_engine_lib
 # Windows-specific system libraries
 if(WIN32)
     target_link_libraries(var_engine_lib
-        PUBLIC ${VAR_WINDOWS_LIBS}
+        PUBLIC
+            ${VAR_WINDOWS_LIBS}
+            propsys     # IPropertyStore, PropVariantInit/Clear
+            ksuser      # KSDATAFORMAT_SUBTYPE_IEEE_FLOAT GUIDs
     )
 endif()
 
