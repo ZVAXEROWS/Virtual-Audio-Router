@@ -100,7 +100,12 @@ $RECYCLE.BIN/
 # User config (do not commit personal device lists)
 settings.json
 
-# Installer output
+# Installer and Packaging Output
+Output/
+gui/build/
+gui/dist/
+*.spec
+icon.ico
 installer/*.exe
 installer/*.msi
 
